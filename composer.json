@@ -24,22 +24,36 @@
         "provisionesta/audit": "^1.2"
     },
     "require-dev": {
-        "orchestra/testbench": "^6.23 || ^7.0 || ^8.0 || ^9.0 || ^10.0",
-        "larastan/larastan": "^2.7 || ^3.0"
-    },
-    "suggest": {
-        "provisionesta/gitlab-laravel-actions": "Collection of Laravel Actions API/Console/Job/Service CRUD classes for GitLab users, groups, projects, epics, issues, merge requests, repository files, and other endpoints."
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "larastan/larastan": "^2.9 || ^3.0",
+        "laravel/pint": "^1.29",
+        "pestphp/pest": "^4.7",
+        "pestphp/pest-plugin-laravel": "^4.1"
     },
     "autoload": {
         "psr-4": {
             "BoldlyGrow\\Gitlab\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "BoldlyGrow\\Gitlab\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:coverage": "pest --coverage"
+    },
     "extra": {
         "laravel": {
             "providers": [
                 "BoldlyGrow\\Gitlab\\GitlabApiServiceProvider"
             ]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
         }
     }
 }
