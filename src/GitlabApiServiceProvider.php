@@ -27,7 +27,7 @@ class GitlabApiServiceProvider extends ServiceProvider
      */
     protected function bootRoutes()
     {
-        //$this->loadRoutesFrom(__DIR__.'/Routes/console.php');
+        // $this->loadRoutesFrom(__DIR__.'/Routes/console.php');
     }
 
     /**
@@ -52,7 +52,7 @@ class GitlabApiServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->publishes(
                 [
-                    __DIR__ . '/Config/gitlab-api-client.php' => config_path('gitlab-api-client.php')
+                    __DIR__ . '/Config/gitlab-api-client.php' => config_path('gitlab-api-client.php'),
                 ],
                 'gitlab-api-client'
             );
