@@ -13,6 +13,7 @@
             "spacing": "one"
         },
         "method_chaining_indentation": true,
+        "new_with_parentheses": true,
         "no_extra_blank_lines": {
             "tokens": [
                 "extra",
