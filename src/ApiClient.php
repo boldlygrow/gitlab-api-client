@@ -1045,7 +1045,7 @@ class ApiClient
                 case 500:
                     throw new ServerErrorException(json_encode($response->data));
                 case 503:
-                    throw new ServiceUnavailableException;
+                    throw new ServiceUnavailableException();
                 case 520:
                     throw new CloudflareUnknownErrorException(json_encode($response->data));
                 case 521:
