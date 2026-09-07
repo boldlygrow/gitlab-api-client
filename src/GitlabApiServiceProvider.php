@@ -1,6 +1,6 @@
 <?php
 
-namespace Provisionesta\Gitlab;
+namespace BoldlyGrow\Gitlab;
 
 use Illuminate\Support\ServiceProvider;
 

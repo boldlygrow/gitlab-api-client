@@ -1,6 +1,6 @@
 <?php
 
-namespace Provisionesta\Gitlab\Exceptions;
+namespace BoldlyGrow\Gitlab\Exceptions;
 
 use Exception;
 

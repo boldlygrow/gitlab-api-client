@@ -1,14 +1,19 @@
 {
-    "name": "provisionesta/gitlab-api-client",
+    "name": "boldlygrow/gitlab-api-client",
     "description": "GitLab API Client for Laravel",
-    "homepage": "https://gitlab.com/provisionesta/gitlab-api-client",
+    "homepage": "https://github.com/boldlygrow/gitlab-api-client",
     "license": "MIT",
     "authors": [
         {
-            "name": "Jefferson Martin",
-            "email": "provisionesta@jeffersonmartin.com"
+            "name": "Jeff Martin",
+            "email": "jeff@boldlygrow.us"
         }
     ],
+    "replace": {
+        "glamstack/gitlab-sdk": "self.version",
+        "gitlab-it/gitlab-sdk": "self.version",
+        "provisionesta/gitlab-api-client": "self.version"
+    },
     "require": {
         "php": "^8.0",
         "illuminate/config": "^8.0 || ^9.0 || ^10.0 || ^11.0 || ^12.0",
@@ -27,13 +32,13 @@
     },
     "autoload": {
         "psr-4": {
-            "Provisionesta\\Gitlab\\": "src/"
+            "BoldlyGrow\\Gitlab\\": "src/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Provisionesta\\Gitlab\\GitlabApiServiceProvider"
+                "BoldlyGrow\\Gitlab\\GitlabApiServiceProvider"
             ]
         }
     }

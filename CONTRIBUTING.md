@@ -34,7 +34,7 @@ mkdir -p laravel${SDK_LARAVEL_VERSION}-pkg-test/packages/provisionesta
 ln -s ~/Code/gitlab-api-client ~/Code/laravel${SDK_LARAVEL_VERSION}-pkg-test/packages/provisionesta/gitlab-api-client
 # Custom repository location configuration
 cd ~/Code/laravel${SDK_LARAVEL_VERSION}-pkg-test
-sed -i '.bak' -e 's/seeders\/"/&,\n            "Provisionesta\\\\Gitlab\\\\": "packages\/provisionesta\/gitlab-api-client\/src"/g' composer.json
+sed -i '.bak' -e 's/seeders\/"/&,\n            "BoldlyGrow\\\\Gitlab\\\\": "packages\/provisionesta\/gitlab-api-client\/src"/g' composer.json
 composer config repositories.gitlab-api-client '{"type": "path", "url": "packages/provisionesta/gitlab-api-client"}' --file composer.json
 composer require provisionesta/gitlab-api-client:dev-main
 php artisan vendor:publish --tag=gitlab-api-client
@@ -49,7 +49,7 @@ cd ~/Code/my-project-name
 
 mkdir -p packages/provisionesta
 ln -s ~/Code/gitlab-api-client packages/provisionesta/gitlab-api-client
-sed -i '.bak' -e 's/seeders\/"/&,\n            "Provisionesta\\\\Gitlab\\\\": "packages\/provisionesta\/gitlab-api-client\/src"/g' composer.json
+sed -i '.bak' -e 's/seeders\/"/&,\n            "BoldlyGrow\\\\Gitlab\\\\": "packages\/provisionesta\/gitlab-api-client\/src"/g' composer.json
 composer config repositories.gitlab-api-client '{"type": "path", "url": "packages/provisionesta/gitlab-api-client"}' --file composer.json
 composer require provisionesta/gitlab-api-client:dev-main
 php artisan vendor:publish --tag=gitlab-api-client
@@ -87,7 +87,7 @@ Update the `composer.json` file in your testing application (not the package) to
 "autoload": {
     "psr-4": {
         "App\\": "app/",
-        "Provisionesta\\Gitlab\\": "packages/provisionesta/gitlab-api-client/src",
+        "BoldlyGrow\\Gitlab\\": "packages/provisionesta/gitlab-api-client/src",
     }
 },
 ```

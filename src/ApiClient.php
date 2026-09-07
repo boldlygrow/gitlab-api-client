@@ -1,33 +1,32 @@
 <?php
 
-namespace Provisionesta\Gitlab;
-
+namespace BoldlyGrow\Gitlab;
+use BoldlyGrow\Gitlab\Exceptions\BadRequestException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionRefusedException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionUnreachableException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareInternalErrorException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareRequestTimeoutException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareResponseTimeoutException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareSslCertificateException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareSslHandshakeException;
+use BoldlyGrow\Gitlab\Exceptions\CloudflareUnknownErrorException;
+use BoldlyGrow\Gitlab\Exceptions\ConfigurationException;
+use BoldlyGrow\Gitlab\Exceptions\ConflictException;
+use BoldlyGrow\Gitlab\Exceptions\ForbiddenException;
+use BoldlyGrow\Gitlab\Exceptions\MethodNotAllowedException;
+use BoldlyGrow\Gitlab\Exceptions\NotFoundException;
+use BoldlyGrow\Gitlab\Exceptions\PreconditionFailedException;
+use BoldlyGrow\Gitlab\Exceptions\RateLimitException;
+use BoldlyGrow\Gitlab\Exceptions\ServerErrorException;
+use BoldlyGrow\Gitlab\Exceptions\ServiceUnavailableException;
+use BoldlyGrow\Gitlab\Exceptions\UnauthorizedException;
+use BoldlyGrow\Gitlab\Exceptions\UnprocessableException;
 use Carbon\Carbon;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Provisionesta\Audit\Log;
-use Provisionesta\Gitlab\Exceptions\BadRequestException;
-use Provisionesta\Gitlab\Exceptions\CloudflareConnectionRefusedException;
-use Provisionesta\Gitlab\Exceptions\CloudflareConnectionUnreachableException;
-use Provisionesta\Gitlab\Exceptions\CloudflareInternalErrorException;
-use Provisionesta\Gitlab\Exceptions\CloudflareRequestTimeoutException;
-use Provisionesta\Gitlab\Exceptions\CloudflareResponseTimeoutException;
-use Provisionesta\Gitlab\Exceptions\CloudflareSslCertificateException;
-use Provisionesta\Gitlab\Exceptions\CloudflareSslHandshakeException;
-use Provisionesta\Gitlab\Exceptions\CloudflareUnknownErrorException;
-use Provisionesta\Gitlab\Exceptions\ConfigurationException;
-use Provisionesta\Gitlab\Exceptions\ConflictException;
-use Provisionesta\Gitlab\Exceptions\ForbiddenException;
-use Provisionesta\Gitlab\Exceptions\MethodNotAllowedException;
-use Provisionesta\Gitlab\Exceptions\NotFoundException;
-use Provisionesta\Gitlab\Exceptions\PreconditionFailedException;
-use Provisionesta\Gitlab\Exceptions\RateLimitException;
-use Provisionesta\Gitlab\Exceptions\ServerErrorException;
-use Provisionesta\Gitlab\Exceptions\ServiceUnavailableException;
-use Provisionesta\Gitlab\Exceptions\UnauthorizedException;
-use Provisionesta\Gitlab\Exceptions\UnprocessableException;
 
 class ApiClient
 {
@@ -36,7 +35,7 @@ class ApiClient
      *
      * Example Usage:
      * ```php
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      * ApiClient::testConnection();
      * ```
      *
@@ -73,7 +72,7 @@ class ApiClient
      *
      * Example Usage:
      * ```
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      *
      * $response = ApiClient::get(
      *     uri: 'projects/' . ApiClient::urlencode('group_name/child_group_name/project_name')
@@ -108,7 +107,7 @@ class ApiClient
      *
      * Example Usage:
      * ```php
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      *
      * $response = ApiClient::get(
      *     uri: 'users/' . $id
@@ -234,7 +233,7 @@ class ApiClient
      *
      * Example Usage:
      * ```php
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      *
      * $response = ApiClient::post(
      *     uri: 'projects',
@@ -318,7 +317,7 @@ class ApiClient
      *
      * Example Usage:
      * ```php
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      *
      * $project_id = '12345678';
      * $response = ApiClient::put(
@@ -426,7 +425,7 @@ class ApiClient
      *
      * Example Usage:
      * ```php
-     * use Provisionesta\Gitlab\ApiClient;
+     * use BoldlyGrow\Gitlab\ApiClient;
      *
      * $user_id = '12345678';
      * $response = ApiClient::delete('users/' . $user_id);
