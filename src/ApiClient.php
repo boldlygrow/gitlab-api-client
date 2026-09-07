@@ -1,6 +1,8 @@
 <?php
 
 namespace BoldlyGrow\Gitlab;
+
+use BoldlyGrow\AuditLog\AuditLog;
 use BoldlyGrow\Gitlab\Exceptions\BadRequestException;
 use BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionRefusedException;
 use BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionUnreachableException;
@@ -26,7 +28,6 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Provisionesta\Audit\Log;
 
 class ApiClient
 {
@@ -53,7 +54,7 @@ class ApiClient
             connection: $connection
         );
 
-        Log::create(
+        AuditLog::create(
             event_type: 'gitlab.api.test.success',
             level: 'debug',
             message: 'Success',
@@ -178,7 +179,7 @@ class ApiClient
         );
 
         if (self::checkForPagination($response->headers) == true) {
-            Log::create(
+            AuditLog::create(
                 event_type: 'gitlab.api.get.process.pagination.started',
                 level: 'debug',
                 message: 'Paginated Results Process Started',
@@ -203,7 +204,7 @@ class ApiClient
             $count_records = is_countable($response->data) ? count($response->data) : null;
             $duration_ms_per_record = $count_records ? (int) ($event_ms->diffInMilliseconds() / $count_records) : null;
 
-            Log::create(
+            AuditLog::create(
                 count_records: $count_records,
                 duration_ms: $event_ms,
                 duration_ms_per_record: $duration_ms_per_record,
@@ -356,7 +357,7 @@ class ApiClient
         }
 
         if ($request->status() === 520) {
-            Log::create(
+            AuditLog::create(
                 errors: [],
                 event_ms: $event_ms,
                 event_type: implode('.', [
@@ -488,7 +489,7 @@ class ApiClient
         ]);
 
         if ($validator->fails()) {
-            Log::create(
+            AuditLog::create(
                 errors: $validator->errors()->all(),
                 event_type: 'gitlab.api.validate.error',
                 level: 'critical',
@@ -810,7 +811,7 @@ class ApiClient
         $method,
         $uri
     ): object {
-        Log::create(
+        AuditLog::create(
             errors: [
                 'code' => $exception->getCode(),
                 'message' => $exception->getMessage(),
@@ -946,7 +947,7 @@ class ApiClient
             }
         }
 
-        Log::create(
+        AuditLog::create(
             count_records: $count_records,
             errors: $errors,
             event_ms: $event_ms,
@@ -1089,7 +1090,7 @@ class ApiClient
         }
 
         if ($rate_limit_remaining && $percent_remaining <= 20) {
-            Log::create(
+            AuditLog::create(
                 event_type: 'gitlab.api.rate-limit.approaching',
                 level: 'critical',
                 message: implode(' ', [
@@ -1142,7 +1143,7 @@ class ApiClient
         }
 
         if ($rate_limit_remaining && $rate_limit_remaining <= 1) {
-            Log::create(
+            AuditLog::create(
                 event_type: 'gitlab.api.rate-limit.exceeded',
                 level: 'critical',
                 message: implode(' ', [
