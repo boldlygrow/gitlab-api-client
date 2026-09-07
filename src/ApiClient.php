@@ -42,8 +42,7 @@ class ApiClient
      *
      * @link https://docs.gitlab.com/ee/api/version.html
      *
-     * @param  array  $connection  (optional)
-     *                             An array with `url` and `token`.
+     * @param  array  $connection  (optional) An array with `url` and `token`.
      *                             If not set, the `config('gitlab-api-client')` array will be used that
      *                             uses the GITLAB_API_* variables from your .env file.
      */
@@ -113,16 +112,12 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri
-     *                              The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional)
-     *                              Query data to apply to GET request
-     * @param  array   $connection  (optional)
-     *                              An array with `url` and `token`.
+     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array   $data        (optional) Query data to apply to GET request
+     * @param  array   $connection  (optional) An array with `url` and `token`.
      *                              If not set, the `config('gitlab-api-client')` array will be used that
      *                              uses the GITLAB_API_* variables from your .env file.
-     * @param  int     $per_page
-     *                              The number of results for each paginated request. The default for the API is 20. To avoid rate limits, we
+     * @param  int     $per_page    The number of results for each paginated request. The default for the API is 20. To avoid rate limits, we
      *                              increase this to 100. This can be overridden by passing the argument in the `get()` method.
      *
      * @return object
@@ -240,12 +235,9 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri
-     *                              The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional)
-     *                              Post Body array
-     * @param  array   $connection  (optional)
-     *                              An array with `url` and `token`.
+     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array   $data        (optional) Post Body array
+     * @param  array   $connection  (optional) An array with `url` and `token`.
      *                              If not set, the `config('gitlab-api-client')` array will be used that
      *                              uses the GITLAB_API_* variables from your .env file.
      *
@@ -322,12 +314,9 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri
-     *                              The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional)
-     *                              Request data to send with PUT request
-     * @param  array   $connection  (optional)
-     *                              An array with `url` and `token`.
+     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array   $data        (optional) Request data to send with PUT request
+     * @param  array   $connection  (optional) An array with `url` and `token`.
      *                              If not set, the `config('gitlab-api-client')` array will be used that
      *                              uses the GITLAB_API_* variables from your .env file.
      *
@@ -423,12 +412,9 @@ class ApiClient
      * $response = ApiClient::delete('users/' . $user_id);
      * ```
      *
-     * @param  string  $uri
-     *                              The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional)
-     *                              Request data to send with DELETE request
-     * @param  array   $connection  (optional)
-     *                              An array with `url` and `token`.
+     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array   $data        (optional) Request data to send with DELETE request
+     * @param  array   $connection  (optional) An array with `url` and `token`.
      *                              If not set, the `config('gitlab-api-client')` array will be used that
      *                              uses the GITLAB_API_* variables from your .env file.
      *
@@ -474,8 +460,7 @@ class ApiClient
     /**
      * Validate connection config array
      *
-     * @param  array  $connection
-     *                             An array with `url` and `token`.
+     * @param  array  $connection  An array with `url` and `token`.
      */
     private static function validateConnection(array $connection): array
     {
@@ -514,8 +499,7 @@ class ApiClient
     /**
      * Set the request headers for the GitLab API request
      *
-     * @param  array  $connection
-     *                             An array with `url` and `token`.
+     * @param  array  $connection  An array with `url` and `token`.
      */
     private static function getRequestHeaders(array $connection): array
     {
@@ -622,8 +606,7 @@ class ApiClient
      *
      * @see https://docs.gitlab.com/ee/api/rest/index.html#other-pagination-headers
      *
-     * @param  array  $headers
-     *                          API response headers from API request or parsed response.
+     * @param  array  $headers  API response headers from API request or parsed response.
      *
      * @return bool
      *              True if the response requires multiple pages
@@ -645,8 +628,7 @@ class ApiClient
      *
      * @see https://docs.gitlab.com/ee/api/rest/index.html#pagination-link-header
      *
-     * @param  array  $headers
-     *                          API response headers from GitLab request or parsed response.
+     * @param  array  $headers  API response headers from GitLab request or parsed response.
      *
      * @return ?string
      *                 https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100
@@ -681,12 +663,9 @@ class ApiClient
      *
      * @link https://docs.gitlab.com/ee/api/rest/#pagination
      *
-     * @param  array   $connection
-     *                                 An array with `url` and `token`.
-     * @param  string  $paginated_url
-     *                                 The paginated URL generated in the get() method
-     * @param  array   $data
-     *                                 An array of records from the first page to append to paginated results
+     * @param  array   $connection     An array with `url` and `token`.
+     * @param  string  $paginated_url  The paginated URL generated in the get() method
+     * @param  array   $data           An array of records from the first page to append to paginated results
      *
      * @return array
      *               An array of the response objects for each page combined.
@@ -787,11 +766,9 @@ class ApiClient
      * Handle GitLab API Exception
      *
      * @param  RequestException  $exception  An instance of the exception
-     * @param  string            $method
-     *                                       The upstream method that invoked this method for traceability
+     * @param  string            $method     The upstream method that invoked this method for traceability
      *                                       Ex. __METHOD__
-     * @param  string            $uri
-     *                                       HTTP Request URI
+     * @param  string            $uri        HTTP Request URI
      *
      * @return object
      *                {
@@ -854,15 +831,11 @@ class ApiClient
      *
      * This method is called from other methods and create log entry and throw exception
      *
-     * @param  string            $method
-     *                                      The upstream method that invoked this method for traceability
+     * @param  string            $method    The upstream method that invoked this method for traceability
      *                                      Ex. __METHOD__
-     * @param  string            $url
-     *                                      The URL of the API call including the concatenated base URL and URI
-     * @param  object            $response
-     *                                      The raw unformatted HTTP client response
-     * @param  ?CarbonInterface  $event_ms
-     *                                      A process start timestamp used to calculate duration in ms for logs
+     * @param  string            $url       The URL of the API call including the concatenated base URL and URI
+     * @param  object            $response  The raw unformatted HTTP client response
+     * @param  ?CarbonInterface  $event_ms  A process start timestamp used to calculate duration in ms for logs
      */
     private static function logResponse(
         string $method,
@@ -980,12 +953,9 @@ class ApiClient
      *
      * This method checks whether the .env variable or config value for `GITLAB_API_EXCEPTIONS=true`
      *
-     * @param  string  $method
-     *                            The lowercase name of the method that calls this function (ex. `get`)
-     * @param  string  $url
-     *                            The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response
-     *                            The HTTP response formatted with $this->parseApiResponse()
+     * @param  string  $method    The lowercase name of the method that calls this function (ex. `get`)
+     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
+     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
      *
      * @throws BadRequestException
      * @throws CloudflareConnectionRefusedException
@@ -1069,12 +1039,9 @@ class ApiClient
     /**
      * Create a warning log entry for an API call if the rate limit remaining is less than 10 percent
      *
-     * @param  string  $method
-     *                            The lowercase name of the method that calls this function (ex. `get`)
-     * @param  string  $url
-     *                            The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response
-     *                            The HTTP response formatted with $this->parseApiResponse()
+     * @param  string  $method    The lowercase name of the method that calls this function (ex. `get`)
+     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
+     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
      */
     private static function checkIfRateLimitApproaching(
         string $method,
@@ -1120,13 +1087,10 @@ class ApiClient
      * Create an error log entry for an API call if the rate limit remaining is equal to zero (0) or one (1),
      * indicating that this is the last request that will be successful.
      *
-     * @param  string  $method
-     *                            The upstream method that invoked this method for traceability
+     * @param  string  $method    The upstream method that invoked this method for traceability
      *                            Ex. __METHOD__
-     * @param  string  $url
-     *                            The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response
-     *                            The HTTP response formatted with $this->parseApiResponse()
+     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
+     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
      */
     private static function checkIfRateLimitExceeded(
         string $method,
