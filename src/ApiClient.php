@@ -485,7 +485,11 @@ class ApiClient
 
         $validator = Validator::make($connection, [
             'url' => 'required|url:https',
-            'token' => 'required|alpha_dash',
+            // Matches legacy glpat-XXXX (20 chars) OR modern glpat-XXXX.XX.XXXXX formats
+            'token' => [
+                'required',
+                'regex:/^glpat-[A-Za-z0-9_-]{20,40}(\.[a-z0-9]{2}\.[a-z0-9]{5,15})?$/'
+            ],
         ]);
 
         if ($validator->fails()) {
