@@ -6,7 +6,7 @@
 
 The GitLab API Client is an open source [Composer](https://getcomposer.org/) package for use in Laravel applications for connecting to GitLab SaaS or self-managed instances for provisioning and deprovisioning of users, groups, projects, and other related functionality.
 
-This is maintained by the open source community and is not maintained by any company. Please use at your own risk and create merge requests for any bugs that you encounter.
+Please use at your own risk and create merge requests for any bugs that you encounter.
 
 ### Problem Statement
 
@@ -15,8 +15,6 @@ Instead of providing an SDK method for every endpoint in the API documentation, 
 This builds upon the simplicity of the [Laravel HTTP Client](https://laravel.com/docs/10.x/http-client) that is powered by the [Guzzle HTTP client](http://docs.guzzlephp.org/en/stable/) to provide "last lines of code parsing" for GitLab API responses to improve the developer experience.
 
 The value of this API Client is that it handles the API request logging, response pagination, rate limit backoff, and 4xx/5xx exception handling for you.
-
-For a comprehensive SDK with pre-built [Laravel Actions](https://laravelactions.com/) for console commands, service class methods, dispatchable jobs, and API endpoints, see the [provisionesta/gitlab-laravel-actions](https://gitlab.com/provisionesta/gitlab-laravel-actions) package.
 
 ### Example Usage
 
