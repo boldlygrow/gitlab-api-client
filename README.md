@@ -820,6 +820,33 @@ An exception is thrown for any 4xx or 5xx responses. All responses are automatic
 | 500  | `BoldlyGrow\Gitlab\Exceptions\ServerErrorException`        |
 | 503  | `BoldlyGrow\Gitlab\Exceptions\ServiceUnavailableException` |
 
+### Exception Messages
+
+Every exception message contains the HTTP method, status code, and full URL of the request, followed by the reason that the GitLab API returned for the failure.
+
+```php
+GET 400 https://gitlab.example.com/api/v4/projects/56/repository/files/stations%2Flp01%2Ejson (Reason) ref is missing
+```
+
+The GitLab API does not use a consistent key for error messages, so each of the keys below is checked in order and the first one that is present is used as the reason.
+
+| Key                 | Used When                                                                             | Example Body                                             |
+|---------------------|---------------------------------------------------------------------------------------|----------------------------------------------------------|
+| `error_description` | An OAuth endpoint rejects the request                                                   | `{"error":"invalid_grant","error_description":"..."}`     |
+| `error`             | A query string or request body parameter is missing or invalid                          | `{"error":"ref is missing"}`                              |
+| `message`           | The application or a model validator rejects the request                                | `{"message":"400 Bad request - Duplicate branch name"}`   |
+
+When `message` contains validation errors keyed by attribute name, they are flattened into a single line.
+
+```php
+// {"message":{"name":["has already been taken"],"path":["can't be blank"]}}
+POST 400 https://gitlab.example.com/api/v4/projects (Reason) name: has already been taken, path: can't be blank
+```
+
+If the response body does not use any of these keys, the body itself is appended (truncated to 1000 characters) so that the reason is never discarded. If the response body is empty, the message contains only the method, status code, and URL.
+
+The same reason is stored in the `errors` array of the audit log entry for any unsuccessful request.
+
 ### Catching Exceptions
 
 You can catch any exceptions that you want to handle silently. Any uncaught exceptions will appear for users and cause 500 errors that will appear in your monitoring software.

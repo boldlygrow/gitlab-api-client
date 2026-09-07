@@ -763,6 +763,74 @@ class ApiClient
     }
 
     /**
+     * Parse the reason for an unsuccessful API response into a human readable string
+     *
+     * The GitLab API does not use a consistent key for error messages, so the reason for a failed
+     * request is discarded when only checking a single key.
+     *
+     * - `error` is used when Grape rejects the request before it reaches the application, usually
+     *   for a missing or invalid query string or request body parameter.
+     *   Ex. `{"error":"ref is missing"}`
+     * - `message` is used when the application or a model validator rejects the request. This is
+     *   either a string or an object keyed by attribute name with an array of messages.
+     *   Ex. `{"message":"400 Bad request - Duplicate branch name"}`
+     *   Ex. `{"message":{"name":["has already been taken"]}}`
+     * - `error_description` is used by the OAuth endpoints.
+     *   Ex. `{"error":"invalid_grant","error_description":"The provided authorization grant is invalid"}`
+     *
+     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
+     *
+     * @return ?string The reason for the error or null if the response body is empty
+     *                 Ex. `ref is missing`
+     *                 Ex. `name: has already been taken, path: can't be blank`
+     */
+    private static function parseErrorMessage(object $response): ?string
+    {
+        $data = $response->data ?? null;
+
+        // An empty body (ex. a 204 No Content or a non-JSON body that could not be decoded) has no reason
+        if (blank($data) || ((is_object($data) || is_array($data)) && blank((array) $data))) {
+            return null;
+        }
+
+        foreach (['error_description', 'error', 'message'] as $key) {
+            $value = data_get($data, $key);
+
+            if (! blank($value)) {
+                return self::flattenErrorMessage($value);
+            }
+        }
+
+        // The response body does not use a known error key (ex. an HTML error page from a proxy or
+        // an undocumented response), so the entire body is returned to avoid discarding the reason.
+        return Str::limit(is_scalar($data) ? (string) $data : (string) json_encode($data), 1000);
+    }
+
+    /**
+     * Flatten a nested error message into a single line string
+     *
+     * @param  mixed  $value  A string, array, or object from an error response body
+     *
+     * @return string Ex. `name: has already been taken, path: can't be blank`
+     */
+    private static function flattenErrorMessage(mixed $value): string
+    {
+        if (is_scalar($value)) {
+            return trim((string) $value);
+        }
+
+        $messages = [];
+
+        foreach ((array) $value as $key => $item) {
+            $item = self::flattenErrorMessage($item);
+
+            $messages[] = is_string($key) ? $key . ': ' . $item : $item;
+        }
+
+        return implode(', ', $messages);
+    }
+
+    /**
      * Handle GitLab API Exception
      *
      * @param  RequestException  $exception  An instance of the exception
@@ -871,8 +939,8 @@ class ApiClient
         ];
 
         $errors = [];
-        if (isset($response->data->message)) {
-            $errors['message'] = $response->data->message;
+        if ($response->status->failed && ($error_message = self::parseErrorMessage($response)) !== null) {
+            $errors['message'] = $error_message;
         }
 
         $message = 'Success';
@@ -981,12 +1049,14 @@ class ApiClient
         object $response
     ): void {
         if (config('gitlab-api-client.exceptions') == true) {
-            $message = implode(' ', [
+            $error_message = self::parseErrorMessage($response);
+
+            $message = implode(' ', array_filter([
                 Str::upper($method),
                 $response->status->code,
                 $url,
-                isset($response->data->message) ? $response->data->message : null,
-            ]);
+                $error_message ? '(Reason) ' . $error_message : null,
+            ]));
 
             switch ($response->status->code) {
                 case 400:
@@ -1013,25 +1083,25 @@ class ApiClient
                 case 429:
                     throw new RateLimitException($message);
                 case 500:
-                    throw new ServerErrorException(json_encode($response->data));
+                    throw new ServerErrorException($message);
                 case 503:
-                    throw new ServiceUnavailableException();
+                    throw new ServiceUnavailableException($message);
                 case 520:
-                    throw new CloudflareUnknownErrorException(json_encode($response->data));
+                    throw new CloudflareUnknownErrorException($message);
                 case 521:
-                    throw new CloudflareConnectionRefusedException(json_encode($response->data));
+                    throw new CloudflareConnectionRefusedException($message);
                 case 522:
-                    throw new CloudflareRequestTimeoutException(json_encode($response->data));
+                    throw new CloudflareRequestTimeoutException($message);
                 case 523:
-                    throw new CloudflareConnectionUnreachableException(json_encode($response->data));
+                    throw new CloudflareConnectionUnreachableException($message);
                 case 524:
-                    throw new CloudflareResponseTimeoutException(json_encode($response->data));
+                    throw new CloudflareResponseTimeoutException($message);
                 case 525:
-                    throw new CloudflareSslHandshakeException(json_encode($response->data));
+                    throw new CloudflareSslHandshakeException($message);
                 case 526:
-                    throw new CloudflareSslCertificateException(json_encode($response->data));
+                    throw new CloudflareSslCertificateException($message);
                 case 530:
-                    throw new CloudflareInternalErrorException(json_encode($response->data));
+                    throw new CloudflareInternalErrorException($message);
             }
         }
     }
