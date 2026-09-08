@@ -1051,11 +1051,18 @@ class ApiClient
         if (config('gitlab-api-client.exceptions') == true) {
             $error_message = self::parseErrorMessage($response);
 
+            // The URL is kept exactly as it was requested so that it can be reproduced verbatim. A
+            // percent encoded path or query string is hard to read, so a decoded copy is appended
+            // when it differs. The decoded URL is for display only and is never used on its own,
+            // because decoding a `%2F` produces a URL that the API routes to a different endpoint.
+            $decoded_url = urldecode($url);
+
             $message = implode(' ', array_filter([
                 Str::upper($method),
                 $response->status->code,
                 $url,
                 $error_message ? '(Reason) ' . $error_message : null,
+                $decoded_url !== $url ? '(Decoded) ' . $decoded_url : null,
             ]));
 
             switch ($response->status->code) {

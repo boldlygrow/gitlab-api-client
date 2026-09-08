@@ -845,6 +845,12 @@ POST 400 https://gitlab.example.com/api/v4/projects (Reason) name: has already b
 
 If the response body does not use any of these keys, the body itself is appended (truncated to 1000 characters) so that the reason is never discarded. If the response body is empty, the message contains only the method, status code, and URL.
 
+Percent encoded URLs are hard to read, so a decoded copy of the URL is appended when it differs from the URL that was requested. The encoded URL is always shown first and is the one to reproduce the request with, because decoding a `%2F` produces a URL that the API routes to a different endpoint.
+
+```php
+GET 400 https://gitlab.example.com/api/v4/projects/56/repository/files/stations%2Flp01%2Ejson (Reason) ref is missing, ref is empty (Decoded) https://gitlab.example.com/api/v4/projects/56/repository/files/stations/lp01.json
+```
+
 The same reason is stored in the `errors` array of the audit log entry for any unsuccessful request.
 
 ### Catching Exceptions
