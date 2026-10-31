@@ -6,7 +6,7 @@
 
 The GitLab API Client is an open source [Composer](https://getcomposer.org/) package for use in Laravel applications for connecting to GitLab SaaS or self-managed instances for provisioning and deprovisioning of users, groups, projects, and other related functionality.
 
-Please use at your own risk and create merge requests for any bugs that you encounter.
+Please use at your own risk and create pull requests for any bugs that you encounter.
 
 ### Problem Statement
 
@@ -79,7 +79,7 @@ $record = ApiClient::delete(
 
 ### Issue Tracking and Bug Reports
 
-We do not maintain a roadmap of feature requests, however we invite you to contribute and we will gladly review your merge requests.
+We do not maintain a roadmap of feature requests, however we invite you to contribute and we will gladly review your pull requests.
 
 Please create an [issue](https://github.com/boldlygrow/gitlab-api-client/issues) for bug reports.
 
@@ -104,12 +104,12 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) to learn more about how to contrib
 
 | Requirement | Version                     |
 |-------------|-----------------------------|
-| PHP         | `^8.2`, `^8.3`, `^8.4`      |
-| Laravel     | `^11.0`, `^12.0`, `^13.0`   |
+| PHP         | `^8.2` (up to 8.5 tested)   |
+| Laravel     | `^12.0`, `^13.0`            |
 
 ### Upgrade Guide
 
-See the [changelog](https://github.com/boldlygrow/gitlab-api-client/tree/main/changelog) for release notes.
+See the [changelog](CHANGELOG.md) for release notes. If you are upgrading from `provisionesta/gitlab-api-client` (4.x), read the [5.0 release notes](CHANGELOG.md#500---2026-10-31) for the package rename, namespace change, supported Laravel versions, and token validation.
 
 ### Add Composer Package
 
@@ -162,8 +162,10 @@ If your GitLab instance is behind a firewall, then you will need to work with yo
 
 You need to generate an access token on your GitLab instance and update the `GITLAB_API_TOKEN` variable in your `.env` file.
 
+The token must be a personal, group, or project access token that starts with `glpat-`, in either the legacy format or the newer format with a routing suffix (ex. `glpat-....01.xxxxxxxxx`). Other token types, such as OAuth access tokens, are rejected with a `ConfigurationException`.
+
 ```php
-GITLAB_API_TOKEN="glpat-S3cr3tK3yG03sH3r3"
+GITLAB_API_TOKEN="glpat-<your-access-token>"
 ```
 
 See [Security Best Practices](#security-best-practices) before creating an API token.
@@ -177,7 +179,7 @@ The variables that you define in your `.env` file are used by default unless you
 ```php
 $connection = [
     'url' => 'https://gitlab.com',
-    'token' => 'glpat-S3cr3tK3yG03sH3r3'
+    'token' => 'glpat-<your-access-token>'
 ];
 ```
 
@@ -806,19 +808,32 @@ An exception is thrown for any 4xx or 5xx responses. All responses are automatic
 
 ### Exceptions
 
-| Code | Exception Class                                               |
-|------|---------------------------------------------------------------|
-| N/A  | `BoldlyGrow\Gitlab\Exceptions\ConfigurationException`      |
-| 400  | `BoldlyGrow\Gitlab\Exceptions\BadRequestException`         |
-| 401  | `BoldlyGrow\Gitlab\Exceptions\UnauthorizedException`       |
-| 403  | `BoldlyGrow\Gitlab\Exceptions\ForbiddenException`          |
-| 404  | `BoldlyGrow\Gitlab\Exceptions\NotFoundException`           |
-| 409  | `BoldlyGrow\Gitlab\Exceptions\ConflictException`           |
-| 412  | `BoldlyGrow\Gitlab\Exceptions\PreconditionFailedException` |
-| 422  | `BoldlyGrow\Gitlab\Exceptions\UnprocessableException`      |
-| 429  | `BoldlyGrow\Gitlab\Exceptions\RateLimitException`          |
-| 500  | `BoldlyGrow\Gitlab\Exceptions\ServerErrorException`        |
-| 503  | `BoldlyGrow\Gitlab\Exceptions\ServiceUnavailableException` |
+| Code      | Exception Class                                                         |
+|-----------|-------------------------------------------------------------------------|
+| N/A       | `BoldlyGrow\Gitlab\Exceptions\ConfigurationException`                   |
+| 400       | `BoldlyGrow\Gitlab\Exceptions\BadRequestException`                      |
+| 401       | `BoldlyGrow\Gitlab\Exceptions\UnauthorizedException`                    |
+| 403       | `BoldlyGrow\Gitlab\Exceptions\ForbiddenException`                       |
+| 404       | `BoldlyGrow\Gitlab\Exceptions\NotFoundException`                        |
+| 405       | `BoldlyGrow\Gitlab\Exceptions\MethodNotAllowedException`                |
+| 409       | `BoldlyGrow\Gitlab\Exceptions\ConflictException`                        |
+| 412       | `BoldlyGrow\Gitlab\Exceptions\PreconditionFailedException`              |
+| 422       | `BoldlyGrow\Gitlab\Exceptions\UnprocessableException`                   |
+| 429       | `BoldlyGrow\Gitlab\Exceptions\RateLimitException`                       |
+| 500       | `BoldlyGrow\Gitlab\Exceptions\ServerErrorException`                     |
+| 503       | `BoldlyGrow\Gitlab\Exceptions\ServiceUnavailableException`              |
+| 520       | `BoldlyGrow\Gitlab\Exceptions\CloudflareUnknownErrorException`          |
+| 521       | `BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionRefusedException`     |
+| 522       | `BoldlyGrow\Gitlab\Exceptions\CloudflareRequestTimeoutException`        |
+| 523       | `BoldlyGrow\Gitlab\Exceptions\CloudflareConnectionUnreachableException` |
+| 524       | `BoldlyGrow\Gitlab\Exceptions\CloudflareResponseTimeoutException`       |
+| 525       | `BoldlyGrow\Gitlab\Exceptions\CloudflareSslHandshakeException`          |
+| 526       | `BoldlyGrow\Gitlab\Exceptions\CloudflareSslCertificateException`        |
+| 530       | `BoldlyGrow\Gitlab\Exceptions\CloudflareInternalErrorException`         |
+| Other 4xx | `BoldlyGrow\Gitlab\Exceptions\BadRequestException`                      |
+| Other 5xx | `BoldlyGrow\Gitlab\Exceptions\ServerErrorException`                     |
+
+A `PUT` request that Cloudflare rejects with a `520` response is retried up to 10 times, 2 seconds apart, before the exception is thrown.
 
 ### Exception Messages
 
@@ -843,7 +858,7 @@ When `message` contains validation errors keyed by attribute name, they are flat
 POST 400 https://gitlab.example.com/api/v4/projects (Reason) name: has already been taken, path: can't be blank
 ```
 
-If the response body does not use any of these keys, the body itself is appended (truncated to 1000 characters) so that the reason is never discarded. If the response body is empty, the message contains only the method, status code, and URL.
+If the response body is JSON that doesn't use any of these keys, the body itself is appended (truncated to 1000 characters) so that the reason is not discarded. If the response body is empty or isn't JSON (ex. an HTML error page from Cloudflare), the message contains only the method, status code, and URL.
 
 Percent encoded URLs are hard to read, so a decoded copy of the URL is appended when it differs from the URL that was requested. The encoded URL is always shown first and is the one to reproduce the request with, because decoding a `%2F` produces a URL that the API routes to a different endpoint.
 
@@ -1278,33 +1293,46 @@ By default, the `key` and `password` fields are excluded from `GET` requests and
 The `event_type` key should be used for any categorization and log searches.
 
 - **Format:** `gitlab.api.{method}.{result/log_level}.{reason?}`
-- **Methods:** `get|post|patch|put|delete`
+- **Methods:** `get|getPaginatedResults|post|put|delete`
 
-| Status Code | Event Type                                        | Log Level |
-|-------------|---------------------------------------------------|-----------|
-| N/A         | `gitlab.api.test.success`                         | DEBUG     |
-| N/A         | `gitlab.api.test.error`                           | CRITICAL  |
-| N/A         | `gitlab.api.validate.error`                       | CRITICAL  |
-| N/A         | `gitlab.api.get.process.pagination.started`       | DEBUG     |
-| N/A         | `gitlab.api.get.process.pagination.finished`      | DEBUG     |
-| N/A         | `gitlab.api.rate-limit.approaching`               | CRITICAL  |
-| N/A         | `gitlab.api.rate-limit.exceeded` (Pre-Exception)  | CRITICAL  |
-| N/A         | `gitlab.api.{method}.error.http.exception`        | ERROR     |
-| 200         | `gitlab.api.{method}.success`                     | DEBUG     |
-| 201         | `gitlab.api.{method}.success`                     | DEBUG     |
-| 202         | `gitlab.api.{method}.success`                     | DEBUG     |
-| 204         | `gitlab.api.{method}.success`                     | DEBUG     |
-| 400         | `gitlab.api.{method}.warning.bad-request`         | WARNING   |
-| 401         | `gitlab.api.{method}.error.unauthorized`          | ERROR     |
-| 403         | `gitlab.api.{method}.error.forbidden`             | ERROR     |
-| 404         | `gitlab.api.{method}.warning.not-found`           | WARNING   |
-| 405         | `gitlab.api.{method}.error.method-not-allowed`    | ERROR     |
-| 412         | `gitlab.api.{method}.error.precondition-failed`   | DEBUG     |
-| 422         | `gitlab.api.{method}.error.unprocessable`         | DEBUG     |
-| 429         | `gitlab.api.{method}.critical.rate-limit`         | CRITICAL  |
-| 500         | `gitlab.api.{method}.critical.server-error`       | CRITICAL  |
-| 501         | `gitlab.api.{method}.error.not-implemented`       | ERROR     |
-| 503         | `gitlab.api.{method}.critical.server-unavailable` | CRITICAL  |
+| Status Code | Event Type                                                       | Log Level |
+|-------------|------------------------------------------------------------------|-----------|
+| N/A         | `gitlab.api.test.success`                                        | DEBUG     |
+| N/A         | `gitlab.api.validate.error`                                      | CRITICAL  |
+| N/A         | `gitlab.api.get.process.pagination.started`                      | DEBUG     |
+| N/A         | `gitlab.api.get.process.pagination.finished`                     | DEBUG     |
+| N/A         | `gitlab.api.rate-limit.approaching`                              | CRITICAL  |
+| N/A         | `gitlab.api.rate-limit.exceeded` (Pre-Exception)                 | CRITICAL  |
+| N/A         | `gitlab.api.{method}.error.http.exception`                       | ERROR     |
+| N/A         | `gitlab.api.put.cloudflare.unknown.retrying`                     | WARNING   |
+| 200         | `gitlab.api.{method}.success`                                    | DEBUG     |
+| 201         | `gitlab.api.{method}.success`                                    | DEBUG     |
+| 202         | `gitlab.api.{method}.success`                                    | DEBUG     |
+| 204         | `gitlab.api.{method}.success`                                    | DEBUG     |
+| 400         | `gitlab.api.{method}.warning.bad-request`                        | WARNING   |
+| 401         | `gitlab.api.{method}.error.unauthorized`                         | ERROR     |
+| 403         | `gitlab.api.{method}.error.forbidden`                            | ERROR     |
+| 404         | `gitlab.api.{method}.warning.not-found`                          | WARNING   |
+| 405         | `gitlab.api.{method}.error.method-not-allowed`                   | ERROR     |
+| 409         | `gitlab.api.{method}.error.conflict`                             | ERROR     |
+| 412         | `gitlab.api.{method}.error.precondition-failed`                  | ERROR     |
+| 422         | `gitlab.api.{method}.error.unprocessable`                        | ERROR     |
+| 429         | `gitlab.api.{method}.critical.rate-limit`                        | CRITICAL  |
+| 500         | `gitlab.api.{method}.critical.server-error`                      | CRITICAL  |
+| 501         | `gitlab.api.{method}.error.not-implemented`                      | ERROR     |
+| 503         | `gitlab.api.{method}.critical.server-unavailable`                | CRITICAL  |
+| 520         | `gitlab.api.{method}.critical.cloudflare.unknown.retryable`      | WARNING   |
+| 521         | `gitlab.api.{method}.critical.cloudflare.connection-refused`     | CRITICAL  |
+| 522         | `gitlab.api.{method}.critical.cloudflare.request-timeout`        | CRITICAL  |
+| 523         | `gitlab.api.{method}.critical.cloudflare.connection-unreachable` | CRITICAL  |
+| 524         | `gitlab.api.{method}.critical.cloudflare.response-timeout`       | CRITICAL  |
+| 525         | `gitlab.api.{method}.critical.cloudflare.ssl-handshake`          | CRITICAL  |
+| 526         | `gitlab.api.{method}.critical.cloudflare.ssl-certificate`        | CRITICAL  |
+| 530         | `gitlab.api.{method}.critical.cloudflare.internal-error`         | CRITICAL  |
+| Other 2xx   | `gitlab.api.{method}.success`                                    | DEBUG     |
+| Other 4xx   | `gitlab.api.{method}.error.client-error`                         | ERROR     |
+| Other 5xx   | `gitlab.api.{method}.critical.server-error`                      | CRITICAL  |
+| Other       | `gitlab.api.{method}.warning.unexpected-status`                  | WARNING   |
 
 ### Test Connection
 
