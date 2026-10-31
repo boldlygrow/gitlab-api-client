@@ -1,7 +1,5 @@
 # GitLab API Client
 
-[[_TOC_]]
-
 ## Overview
 
 The GitLab API Client is an open source [Composer](https://getcomposer.org/) package for use in Laravel applications for connecting to GitLab SaaS or self-managed instances for provisioning and deprovisioning of users, groups, projects, and other related functionality.
