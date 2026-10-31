@@ -454,6 +454,7 @@ class ApiClient
             event_ms: $event_ms,
             method: __METHOD__,
             url: self::requestUrl($connection, $uri),
+            request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(

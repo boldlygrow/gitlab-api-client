@@ -94,6 +94,10 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **`put()` and `delete()` build the same URL as `get()` and `post()`**
     - A URI with a leading slash, or a connection `url` with a trailing slash, sent a URL with a double slash (ex. `https://gitlab.com/api/v4//projects/123`).
     - **Why:** The docblocks say that the URI works with or without a leading slash, and `get()` and `post()` already trimmed both.
+- **`delete()` logs its request data**
+    - `delete()` didn't pass its `data` to the log, so `DELETE` request data was never logged, and the `log.request_data.delete` config and `GITLAB_API_LOG_REQUEST_DATA_DELETE_ENABLED` had no effect.
+    - As with the other methods, the `key` and `password` keys are never logged.
+    - **How:** If your `DELETE` request data has values that shouldn't be logged, add their keys to `log.request_data.delete.excluded` in the published config, or set `GITLAB_API_LOG_REQUEST_DATA_DELETE_ENABLED=false`.
 - **Applications that use `CarbonImmutable` no longer get a `TypeError` on every request**
     - The request duration timestamp is typed as `CarbonInterface` instead of `Carbon`.
     - **Why:** With `Date::use(CarbonImmutable::class)`, `now()` returns a `CarbonImmutable`, which the `Carbon` type hint rejected.
