@@ -175,7 +175,8 @@ it('follows the next page link until the last page and combines the results', fu
     expect($response->headers['X-Page'])->toBe('1');
     expect(Http::recorded())->toHaveCount(2);
     expect(loggedEvents('gitlab.api.get.process.pagination.started'))->toHaveCount(1);
-    expect(loggedEvents('gitlab.api.get.process.pagination.finished'))->toHaveCount(1);
+    [$finished] = loggedEvents('gitlab.api.get.process.pagination.finished');
+    expect($finished['context']['count_records'])->toBe(3);
 });
 
 it('reads lowercase pagination headers', function () {
