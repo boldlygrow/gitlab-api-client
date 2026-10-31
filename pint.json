@@ -1,5 +1,8 @@
 {
     "preset": "laravel",
+    "exclude": [
+        "tmp"
+    ],
     "rules": {
         "array_indentation": true,
         "blank_line_after_namespace": true,
@@ -13,7 +16,6 @@
             "spacing": "one"
         },
         "method_chaining_indentation": true,
-        "new_with_parentheses": true,
         "no_extra_blank_lines": {
             "tokens": [
                 "extra",

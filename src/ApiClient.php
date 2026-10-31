@@ -25,10 +25,41 @@ use BoldlyGrow\Gitlab\Exceptions\UnauthorizedException;
 use BoldlyGrow\Gitlab\Exceptions\UnprocessableException;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
+/**
+ * ApiResponse is the object returned by get(), post(), put(), and delete(). See parseApiResponse() for an example.
+ * Static analysis in your application can use it with `@phpstan-import-type ApiResponse from ApiClient`.
+ *
+ * @phpstan-type ApiResponseStatus object{
+ *     code: int,
+ *     ok: bool,
+ *     successful: bool,
+ *     failed: bool,
+ *     serverError: bool,
+ *     clientError: bool,
+ * }
+ * @phpstan-type ApiResponseHeaders array<string, string|array<int, string>>
+ * @phpstan-type ApiResponse object{
+ *     data: mixed,
+ *     headers: ApiResponseHeaders,
+ *     status: ApiResponseStatus,
+ * }
+ * @phpstan-type ApiPaginatedResponse object{
+ *     paginated_results: array<mixed>,
+ *     headers: ApiResponseHeaders,
+ *     status: ApiResponseStatus,
+ * }
+ * @phpstan-type ApiErrorResponse object{
+ *     data: null,
+ *     headers: array{},
+ *     error: object{code: int, message: string, method: string, uri: string},
+ *     status: ApiResponseStatus,
+ * }
+ */
 class ApiClient
 {
     /**
@@ -42,9 +73,9 @@ class ApiClient
      *
      * @link https://docs.gitlab.com/ee/api/version.html
      *
-     * @param  array  $connection  (optional) An array with `url` and `token`.
-     *                             If not set, the `config('gitlab-api-client')` array will be used that
-     *                             uses the GITLAB_API_* variables from your .env file.
+     * @param  array<string, mixed>  $connection  (optional) An array with `url` and `token`.
+     *                                            If not set, the `config('gitlab-api-client')` array will be used that
+     *                                            uses the GITLAB_API_* variables from your .env file.
      */
     public static function testConnection(array $connection = []): bool
     {
@@ -112,17 +143,16 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional) Query data to apply to GET request
-     * @param  array   $connection  (optional) An array with `url` and `token`.
-     *                              If not set, the `config('gitlab-api-client')` array will be used that
-     *                              uses the GITLAB_API_* variables from your .env file.
-     * @param  int     $per_page    The number of results for each paginated request. The default for the API is 20. To avoid rate limits, we
-     *                              increase this to 100. This can be overridden by passing the argument in the `get()` method.
+     * @param  string                $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array<mixed>          $data        (optional) Query data to apply to GET request
+     * @param  array<string, mixed>  $connection  (optional) An array with `url` and `token`.
+     *                                            If not set, the `config('gitlab-api-client')` array will be used that
+     *                                            uses the GITLAB_API_* variables from your .env file.
+     * @param  int                   $per_page    The number of results for each paginated request. The default for the API is 20. To avoid rate limits, we
+     *                                            increase this to 100. This can be overridden by passing the argument in the `get()` method.
      *
-     * @return object
-     *                See parseApiResponse() method. The content and schema of the data
-     *                array can be found in the API documentation for the endpoint.
+     * @return ApiResponse See parseApiResponse() method. The content and schema of the data array can be found in
+     *                     the API documentation for the endpoint.
      */
     public static function get(
         string $uri,
@@ -135,11 +165,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->get(
-                url: implode('/', [
-                    rtrim($connection['url'], '/'),
-                    'api/v' . config('gitlab-api-client.version'),
-                    ltrim($uri, '/'),
-                ]),
+                url: self::requestUrl($connection, $uri),
                 query: array_merge(['per_page' => $per_page], $data)
             );
         } catch (RequestException $exception) {
@@ -155,25 +181,23 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/') . $query_string,
-            ]),
+            url: self::requestUrl($connection, $uri) . $query_string,
             request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'get',
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/') . $query_string,
-            ]),
+            url: self::requestUrl($connection, $uri) . $query_string,
             response: $response
         );
 
-        if (self::checkForPagination($response->headers) == true) {
+        // The X-Next-Page header says that there is another page, and the Link header has its URL. A response
+        // without a next link is returned as a single page instead of failing.
+        $paginated_url = self::checkForPagination($response->headers)
+            ? self::generateNextPaginatedResultUrl($response->headers)
+            : null;
+
+        if ($paginated_url !== null) {
             AuditLog::create(
                 event_type: 'gitlab.api.get.process.pagination.started',
                 level: 'debug',
@@ -185,18 +209,21 @@ class ApiClient
                 transaction: false
             );
 
-            $response->paginated_results = self::getPaginatedResults(
+            $paginated_results = self::getPaginatedResults(
                 connection: $connection,
-                paginated_url: self::generateNextPaginatedResultUrl(
-                    headers: $response->headers,
-                ),
+                paginated_url: $paginated_url,
                 data: $response->data
             );
 
             // Parse API Response and convert to returnable object with expected format
-            $response = self::parseApiResponse($response);
+            $response = self::parseApiResponse((object) [
+                'paginated_results' => $paginated_results,
+                'headers' => $response->headers,
+                'status' => $response->status,
+            ]);
 
-            $count_records = is_countable($response->data) ? count($response->data) : null;
+            // The records are counted before parseApiResponse() casts them to an object, which is not countable
+            $count_records = count($paginated_results);
             $duration_ms_per_record = $count_records ? (int) ($event_ms->diffInMilliseconds() / $count_records) : null;
 
             AuditLog::create(
@@ -235,15 +262,14 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional) Post Body array
-     * @param  array   $connection  (optional) An array with `url` and `token`.
-     *                              If not set, the `config('gitlab-api-client')` array will be used that
-     *                              uses the GITLAB_API_* variables from your .env file.
+     * @param  string                $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array<mixed>          $data        (optional) Post Body array
+     * @param  array<string, mixed>  $connection  (optional) An array with `url` and `token`.
+     *                                            If not set, the `config('gitlab-api-client')` array will be used that
+     *                                            uses the GITLAB_API_* variables from your .env file.
      *
-     * @return object
-     *                See parseApiResponse() method. The content and schema of the data
-     *                array can be found in the API documentation for the endpoint.
+     * @return ApiResponse See parseApiResponse() method. The content and schema of the data array can be found in
+     *                     the API documentation for the endpoint.
      */
     public static function post(
         string $uri,
@@ -255,11 +281,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->post(
-                url: implode('/', [
-                    rtrim($connection['url'], '/'),
-                    'api/v' . config('gitlab-api-client.version'),
-                    ltrim($uri, '/'),
-                ]),
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -274,21 +296,13 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/'),
-            ]),
+            url: self::requestUrl($connection, $uri),
             request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'post',
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/'),
-            ]),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -314,15 +328,14 @@ class ApiClient
      * );
      * ```
      *
-     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional) Request data to send with PUT request
-     * @param  array   $connection  (optional) An array with `url` and `token`.
-     *                              If not set, the `config('gitlab-api-client')` array will be used that
-     *                              uses the GITLAB_API_* variables from your .env file.
+     * @param  string                $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array<mixed>          $data        (optional) Request data to send with PUT request
+     * @param  array<string, mixed>  $connection  (optional) An array with `url` and `token`.
+     *                                            If not set, the `config('gitlab-api-client')` array will be used that
+     *                                            uses the GITLAB_API_* variables from your .env file.
      *
-     * @return object
-     *                See parseApiResponse() method. The content and schema of the data
-     *                array can be found in the API documentation for the endpoint.
+     * @return ApiResponse See parseApiResponse() method. The content and schema of the data array can be found in
+     *                     the API documentation for the endpoint.
      */
     public static function put(
         string $uri,
@@ -334,7 +347,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->put(
-                url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . $uri,
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -370,7 +383,7 @@ class ApiClient
 
             do {
                 $request = Http::withHeaders(self::getRequestHeaders($connection))->put(
-                    url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . $uri,
+                    url: self::requestUrl($connection, $uri),
                     data: $data
                 );
 
@@ -385,14 +398,14 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             request_data: $data,
             response: $response
         );
 
         self::throwExceptionIfEnabled(
             method: 'put',
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -412,16 +425,14 @@ class ApiClient
      * $response = ApiClient::delete('users/' . $user_id);
      * ```
      *
-     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
-     * @param  array   $data        (optional) Request data to send with DELETE request
-     * @param  array   $connection  (optional) An array with `url` and `token`.
-     *                              If not set, the `config('gitlab-api-client')` array will be used that
-     *                              uses the GITLAB_API_* variables from your .env file.
+     * @param  string                $uri         The URI with or without leading slash after `/api/v4/`
+     * @param  array<mixed>          $data        (optional) Request data to send with DELETE request
+     * @param  array<string, mixed>  $connection  (optional) An array with `url` and `token`.
+     *                                            If not set, the `config('gitlab-api-client')` array will be used that
+     *                                            uses the GITLAB_API_* variables from your .env file.
      *
-     * @return object
-     *                See parseApiResponse() method. The content and schema of the object
-     *                and json arrays can be found in the REST API documentation for the
-     *                specific endpoint.
+     * @return ApiResponse See parseApiResponse() method. The content and schema of the data array can be found in
+     *                     the API documentation for the endpoint.
      */
     public static function delete(string $uri, array $data = [], array $connection = []): object
     {
@@ -430,7 +441,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->delete(
-                url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -445,12 +456,13 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
+            request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'delete',
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -460,7 +472,9 @@ class ApiClient
     /**
      * Validate connection config array
      *
-     * @param  array  $connection  An array with `url` and `token`.
+     * @param  array<string, mixed>  $connection  An array with `url` and `token`.
+     *
+     * @return array<string, mixed>
      */
     private static function validateConnection(array $connection): array
     {
@@ -497,9 +511,31 @@ class ApiClient
     }
 
     /**
+     * Build the full API URL for a URI
+     *
+     * The URI can have a leading slash and the connection URL can have a trailing slash, so both are trimmed to avoid
+     * a double slash that the API routes to a different endpoint.
+     *
+     * @param  array<string, mixed>  $connection  An array with `url` and `token`.
+     * @param  string                $uri         The URI with or without leading slash after `/api/v4/`
+     *
+     * @return string Ex. `https://gitlab.com/api/v4/projects/123`
+     */
+    private static function requestUrl(array $connection, string $uri): string
+    {
+        return implode('/', [
+            rtrim($connection['url'], '/'),
+            'api/v' . config('gitlab-api-client.version'),
+            ltrim($uri, '/'),
+        ]);
+    }
+
+    /**
      * Set the request headers for the GitLab API request
      *
-     * @param  array  $connection  An array with `url` and `token`.
+     * @param  array<string, mixed>  $connection  An array with `url` and `token`.
+     *
+     * @return array<string, string>
      */
     private static function getRequestHeaders(array $connection): array
     {
@@ -524,62 +560,62 @@ class ApiClient
      * nested array for each value, and converts the single array values into strings and converts to an object for
      * easier and consistent accessibility with the parseApiResponse format.
      *
-     * @param  array  $header_response
-     *                                  [
-     *                                  "Date" => [
-     *                                  "Tue, 02 Nov 2021 16:00:30 GMT",
-     *                                  ],
-     *                                  "Content-Type" => [
-     *                                  "application/json",
-     *                                  ],
-     *                                  "Transfer-Encoding" => [
-     *                                  "chunked",
-     *                                  ],
-     *                                  "Connection" => [
-     *                                  "keep-alive",
-     *                                  ],
-     *                                  "Cache-Control" => [
-     *                                  "max-age=0, private, must-revalidate",
-     *                                  ],
-     *                                  "Etag" => [
-     *                                  "W/"ef80161dad0045459a87879e4d6b0769"",
-     *                                  ],
-     *                                  ...(truncated)
-     *                                  ]
+     * @param  array<string, string|array<int, string>>  $header_response
+     *                                                                     [
+     *                                                                     "Date" => [
+     *                                                                     "Tue, 02 Nov 2021 16:00:30 GMT",
+     *                                                                     ],
+     *                                                                     "Content-Type" => [
+     *                                                                     "application/json",
+     *                                                                     ],
+     *                                                                     "Transfer-Encoding" => [
+     *                                                                     "chunked",
+     *                                                                     ],
+     *                                                                     "Connection" => [
+     *                                                                     "keep-alive",
+     *                                                                     ],
+     *                                                                     "Cache-Control" => [
+     *                                                                     "max-age=0, private, must-revalidate",
+     *                                                                     ],
+     *                                                                     "Etag" => [
+     *                                                                     "W/"ef80161dad0045459a87879e4d6b0769"",
+     *                                                                     ],
+     *                                                                     ...(truncated)
+     *                                                                     ]
      *
-     * @return array
-     *               {
-     *               "Date" => "Tue, 02 Nov 2021 16:28:37 GMT",
-     *               "Content-Type" => "application/json",
-     *               "Transfer-Encoding" => "chunked",
-     *               "Connection" => "keep-alive",
-     *               "Cache-Control" => "max-age=0, private, must-revalidate",
-     *               "Etag" => "W/"534830b145cda36bcd6bcd91c3ed3742"",
-     *               "Link": (truncated),
-     *               "Vary" => "Origin",
-     *               "X-Content-Type-Options" => "nosniff",
-     *               "X-Frame-Options" => "SAMEORIGIN",
-     *               "X-Next-Page" => "",
-     *               "X-Page" => "1",
-     *               "X-Per-Page" => "20",
-     *               "X-Prev-Page" => "",
-     *               "X-Request-Id" => "01FKGQPA4V7TPC70J60J72GJ30",
-     *               "X-Runtime" => "0.148641",
-     *               "X-Total" => "1",
-     *               "X-Total-Pages" => "1",
-     *               "RateLimit-Observed" => "2",
-     *               "RateLimit-Remaining" => "1998",
-     *               "RateLimit-Reset" => "1635870577",
-     *               "RateLimit-ResetTime" => "Tue, 02 Nov 2021 16:29:37 GMT",
-     *               "RateLimit-Limit" => "2000",
-     *               "GitLab-LB" => "fe-14-lb-gprd",
-     *               "GitLab-SV" => "localhost",
-     *               "CF-Cache-Status" => "DYNAMIC",
-     *               "Expect-CT" => "max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"",
-     *               "Strict-Transport-Security" => "max-age=31536000",
-     *               "Server" => "cloudflare",
-     *               "CF-RAY" => "6a7ebcad3ce908db-SEA",
-     *               }
+     * @return ApiResponseHeaders
+     *                            {
+     *                            "Date" => "Tue, 02 Nov 2021 16:28:37 GMT",
+     *                            "Content-Type" => "application/json",
+     *                            "Transfer-Encoding" => "chunked",
+     *                            "Connection" => "keep-alive",
+     *                            "Cache-Control" => "max-age=0, private, must-revalidate",
+     *                            "Etag" => "W/"534830b145cda36bcd6bcd91c3ed3742"",
+     *                            "Link": (truncated),
+     *                            "Vary" => "Origin",
+     *                            "X-Content-Type-Options" => "nosniff",
+     *                            "X-Frame-Options" => "SAMEORIGIN",
+     *                            "X-Next-Page" => "",
+     *                            "X-Page" => "1",
+     *                            "X-Per-Page" => "20",
+     *                            "X-Prev-Page" => "",
+     *                            "X-Request-Id" => "01FKGQPA4V7TPC70J60J72GJ30",
+     *                            "X-Runtime" => "0.148641",
+     *                            "X-Total" => "1",
+     *                            "X-Total-Pages" => "1",
+     *                            "RateLimit-Observed" => "2",
+     *                            "RateLimit-Remaining" => "1998",
+     *                            "RateLimit-Reset" => "1635870577",
+     *                            "RateLimit-ResetTime" => "Tue, 02 Nov 2021 16:29:37 GMT",
+     *                            "RateLimit-Limit" => "2000",
+     *                            "GitLab-LB" => "fe-14-lb-gprd",
+     *                            "GitLab-SV" => "localhost",
+     *                            "CF-Cache-Status" => "DYNAMIC",
+     *                            "Expect-CT" => "max-age=604800, report-uri="https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct"",
+     *                            "Strict-Transport-Security" => "max-age=31536000",
+     *                            "Server" => "cloudflare",
+     *                            "CF-RAY" => "6a7ebcad3ce908db-SEA",
+     *                            }
      */
     private static function convertHeadersToArray(array $header_response): array
     {
@@ -606,7 +642,7 @@ class ApiClient
      *
      * @see https://docs.gitlab.com/ee/api/rest/index.html#other-pagination-headers
      *
-     * @param  array  $headers  API response headers from API request or parsed response.
+     * @param  ApiResponseHeaders  $headers  API response headers from API request or parsed response.
      *
      * @return bool
      *              True if the response requires multiple pages
@@ -628,7 +664,7 @@ class ApiClient
      *
      * @see https://docs.gitlab.com/ee/api/rest/index.html#pagination-link-header
      *
-     * @param  array  $headers  API response headers from GitLab request or parsed response.
+     * @param  ApiResponseHeaders  $headers  API response headers from GitLab request or parsed response.
      *
      * @return ?string
      *                 https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100
@@ -636,19 +672,19 @@ class ApiClient
     private static function generateNextPaginatedResultUrl(
         array $headers,
     ): ?string {
+        // GitLab sends one Link header with comma-separated links, but a response with more than one Link header is
+        // kept as an array by convertHeadersToArray(), so each value is split.
         $links = [];
-        if (array_key_exists('Link', $headers)) {
-            $links = explode(', ', $headers['Link']);
-        } elseif (array_key_exists('link', $headers)) {
-            $links = explode(', ', $headers['link']);
+        foreach ((array) ($headers['Link'] ?? $headers['link'] ?? []) as $link_header) {
+            $links = array_merge($links, explode(', ', $link_header));
         }
 
-        foreach ($links as $link_key => $link_url) {
+        foreach ($links as $link_url) {
             if (Str::contains($link_url, 'next')) {
                 // Remove the '<' and '>; rel="next"' that is around the next api_url
                 // Before: <https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100>; rel="next"
                 // After: https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100
-                $url_query = Str::remove('<', $links[$link_key]);
+                $url_query = Str::remove('<', $link_url);
                 $url_query = Str::remove('>; rel="next"', $url_query);
 
                 return $url_query;
@@ -663,12 +699,12 @@ class ApiClient
      *
      * @link https://docs.gitlab.com/ee/api/rest/#pagination
      *
-     * @param  array   $connection     An array with `url` and `token`.
-     * @param  string  $paginated_url  The paginated URL generated in the get() method
-     * @param  array   $data           An array of records from the first page to append to paginated results
+     * @param  array<string, mixed>  $connection     An array with `url` and `token`.
+     * @param  string                $paginated_url  The paginated URL generated in the get() method
+     * @param  array<mixed>          $data           An array of records from the first page to append to paginated results
      *
-     * @return array
-     *               An array of the response objects for each page combined.
+     * @return array<mixed>
+     *                      An array of the response objects for each page combined.
      */
     private static function getPaginatedResults(
         array $connection,
@@ -712,35 +748,36 @@ class ApiClient
      *
      * @link https://laravel.com/docs/10.x/http-client#making-requests
      *
-     * @param  object  $response  Response object from API results
+     * @param  Response|ApiPaginatedResponse  $response  Response object from API results, or the combined pages
+     *                                                   from getPaginatedResults()
      *
-     * @return object Custom response returned for consistency
-     *                {
-     *                +"data": {
-     *                +"id": 12345678
-     *                +"name": "Dade Murphy"
-     *                +"username": "z3r0c00l"
-     *                +"state": "active"
-     *                }
-     *                +"headers": {
-     *                +"Date": "Fri, 12 Nov 2021 20:13:55 GMT"
-     *                +"Content-Type": "application/json"
-     *                +"Content-Length": "1623"
-     *                +"Connection": "keep-alive"
-     *                }
-     *                +"status": {
-     *                +"code": 200
-     *                +"ok": true
-     *                +"successful": true
-     *                +"failed": false
-     *                +"serverError": false
-     *                +"clientError": false
-     *                }
-     *                }
+     * @return ApiResponse Custom response returned for consistency
+     *                     {
+     *                     +"data": {
+     *                     +"id": 12345678
+     *                     +"name": "Dade Murphy"
+     *                     +"username": "z3r0c00l"
+     *                     +"state": "active"
+     *                     }
+     *                     +"headers": {
+     *                     +"Date": "Fri, 12 Nov 2021 20:13:55 GMT"
+     *                     +"Content-Type": "application/json"
+     *                     +"Content-Length": "1623"
+     *                     +"Connection": "keep-alive"
+     *                     }
+     *                     +"status": {
+     *                     +"code": 200
+     *                     +"ok": true
+     *                     +"successful": true
+     *                     +"failed": false
+     *                     +"serverError": false
+     *                     +"clientError": false
+     *                     }
+     *                     }
      */
     private static function parseApiResponse(object $response): object
     {
-        if (property_exists($response, 'paginated_results')) {
+        if (! $response instanceof Response) {
             return (object) [
                 'data' => (object) $response->paginated_results,
                 'headers' => self::convertHeadersToArray($response->headers),
@@ -778,7 +815,7 @@ class ApiClient
      * - `error_description` is used by the OAuth endpoints.
      *   Ex. `{"error":"invalid_grant","error_description":"The provided authorization grant is invalid"}`
      *
-     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
+     * @param  ApiResponse  $response  The HTTP response formatted with $this->parseApiResponse()
      *
      * @return ?string The reason for the error or null if the response body is empty
      *                 Ex. `ref is missing`
@@ -838,27 +875,29 @@ class ApiClient
      *                                       Ex. __METHOD__
      * @param  string            $uri        HTTP Request URI
      *
-     * @return object
-     *                {
-     *                +"error": {
-     *                +"code": "<string>"
-     *                +"message": "<string>"
-     *                +"method": "<string>"
-     *                +"uri": "<string>"
-     *                }
-     *                +"status": {
-     *                +"code": 400
-     *                +"ok": false
-     *                +"successful": false
-     *                +"failed": true
-     *                +"serverError": false
-     *                +"clientError": true
-     *                }
+     * @return ApiErrorResponse
+     *                          {
+     *                          +"data": null
+     *                          +"headers": []
+     *                          +"error": {
+     *                          +"code": "<string>"
+     *                          +"message": "<string>"
+     *                          +"method": "<string>"
+     *                          +"uri": "<string>"
+     *                          }
+     *                          +"status": {
+     *                          +"code": 400
+     *                          +"ok": false
+     *                          +"successful": false
+     *                          +"failed": true
+     *                          +"serverError": false
+     *                          +"clientError": true
+     *                          }
      */
     private static function handleException(
         RequestException $exception,
-        $method,
-        $uri
+        string $method,
+        string $uri
     ): object {
         AuditLog::create(
             errors: [
@@ -876,7 +915,11 @@ class ApiClient
             transaction: true
         );
 
+        // The empty data and headers keep the same properties as a response from parseApiResponse(), since this is
+        // returned by the same methods.
         return (object) [
+            'data' => null,
+            'headers' => [],
             'error' => (object) [
                 'code' => $exception->getCode(),
                 'message' => $exception->getMessage(),
@@ -899,11 +942,13 @@ class ApiClient
      *
      * This method is called from other methods and create log entry and throw exception
      *
-     * @param  string            $method    The upstream method that invoked this method for traceability
-     *                                      Ex. __METHOD__
-     * @param  string            $url       The URL of the API call including the concatenated base URL and URI
-     * @param  object            $response  The raw unformatted HTTP client response
-     * @param  ?CarbonInterface  $event_ms  A process start timestamp used to calculate duration in ms for logs
+     * @param  string            $method        The upstream method that invoked this method for traceability
+     *                                          Ex. __METHOD__
+     * @param  string            $url           The URL of the API call including the concatenated base URL and URI
+     * @param  ApiResponse       $response      The HTTP response formatted with $this->parseApiResponse()
+     * @param  array<mixed>      $request_data  (optional) The request data, which is logged without the keys that are
+     *                                          excluded in the `log.request_data` config for the method
+     * @param  ?CarbonInterface  $event_ms      A process start timestamp used to calculate duration in ms for logs
      */
     private static function logResponse(
         string $method,
@@ -912,7 +957,7 @@ class ApiClient
         array $request_data = [],
         ?CarbonInterface $event_ms = null
     ): void {
-        $log_type = [
+        $log_types = [
             200 => ['event_type' => 'success', 'level' => 'debug'],
             201 => ['event_type' => 'success', 'level' => 'debug'],
             202 => ['event_type' => 'success', 'level' => 'debug'],
@@ -922,6 +967,7 @@ class ApiClient
             403 => ['event_type' => 'error.forbidden', 'level' => 'error'],
             404 => ['event_type' => 'warning.not-found', 'level' => 'warning'],
             405 => ['event_type' => 'error.method-not-allowed', 'level' => 'error'],
+            409 => ['event_type' => 'error.conflict', 'level' => 'error'],
             412 => ['event_type' => 'error.precondition-failed', 'level' => 'error'],
             422 => ['event_type' => 'error.unprocessable', 'level' => 'error'],
             429 => ['event_type' => 'critical.rate-limit', 'level' => 'critical'],
@@ -937,6 +983,15 @@ class ApiClient
             526 => ['event_type' => 'critical.cloudflare.ssl-certificate', 'level' => 'critical'],
             530 => ['event_type' => 'critical.cloudflare.internal-error', 'level' => 'critical'],
         ];
+
+        // A status code that is not listed above (ex. a 502 or 504 from a gateway) is logged with the event type for
+        // its range instead of failing with an undefined array key before throwExceptionIfEnabled() is reached.
+        $log_type = $log_types[$response->status->code] ?? match (true) {
+            $response->status->successful => ['event_type' => 'success', 'level' => 'debug'],
+            $response->status->clientError => ['event_type' => 'error.client-error', 'level' => 'error'],
+            $response->status->serverError => ['event_type' => 'critical.server-error', 'level' => 'critical'],
+            default => ['event_type' => 'warning.unexpected-status', 'level' => 'warning'],
+        };
 
         $errors = [];
         if ($response->status->failed && ($error_message = self::parseErrorMessage($response)) !== null) {
@@ -1001,9 +1056,9 @@ class ApiClient
                 'gitlab',
                 'api',
                 $method_suffix,
-                $log_type[$response->status->code]['event_type'],
+                $log_type['event_type'],
             ]),
-            level: $log_type[$response->status->code]['level'],
+            level: $log_type['level'],
             message: $message,
             metadata: $metadata,
             method: $method,
@@ -1021,9 +1076,9 @@ class ApiClient
      *
      * This method checks whether the .env variable or config value for `GITLAB_API_EXCEPTIONS=true`
      *
-     * @param  string  $method    The lowercase name of the method that calls this function (ex. `get`)
-     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
+     * @param  string       $method    The lowercase name of the method that calls this function (ex. `get`)
+     * @param  string       $url       The URL of the API call including the concatenated base URL and URI
+     * @param  ApiResponse  $response  The HTTP response formatted with $this->parseApiResponse()
      *
      * @throws BadRequestException
      * @throws CloudflareConnectionRefusedException
@@ -1109,6 +1164,16 @@ class ApiClient
                     throw new CloudflareSslCertificateException($message);
                 case 530:
                     throw new CloudflareInternalErrorException($message);
+                default:
+                    // A status code without its own exception (ex. a 410, 501, or 502) is treated as the x00 status
+                    // code of its range, as RFC 9110 15 requires for an unrecognized status code, so that every 4xx
+                    // and 5xx response throws an exception.
+                    if ($response->status->clientError) {
+                        throw new BadRequestException($message);
+                    }
+                    if ($response->status->serverError) {
+                        throw new ServerErrorException($message);
+                    }
             }
         }
     }
@@ -1116,9 +1181,9 @@ class ApiClient
     /**
      * Create a warning log entry for an API call if the rate limit remaining is less than 10 percent
      *
-     * @param  string  $method    The lowercase name of the method that calls this function (ex. `get`)
-     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
+     * @param  string       $method    The lowercase name of the method that calls this function (ex. `get`)
+     * @param  string       $url       The URL of the API call including the concatenated base URL and URI
+     * @param  ApiResponse  $response  The HTTP response formatted with $this->parseApiResponse()
      */
     private static function checkIfRateLimitApproaching(
         string $method,
@@ -1164,10 +1229,10 @@ class ApiClient
      * Create an error log entry for an API call if the rate limit remaining is equal to zero (0) or one (1),
      * indicating that this is the last request that will be successful.
      *
-     * @param  string  $method    The upstream method that invoked this method for traceability
-     *                            Ex. __METHOD__
-     * @param  string  $url       The URL of the API call including the concatenated base URL and URI
-     * @param  object  $response  The HTTP response formatted with $this->parseApiResponse()
+     * @param  string       $method    The upstream method that invoked this method for traceability
+     *                                 Ex. __METHOD__
+     * @param  string       $url       The URL of the API call including the concatenated base URL and URI
+     * @param  ApiResponse  $response  The HTTP response formatted with $this->parseApiResponse()
      */
     private static function checkIfRateLimitExceeded(
         string $method,
