@@ -91,6 +91,7 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **Pagination handles more than one `Link` header and a missing next link**
     - A response with more than one `Link` header failed with a `TypeError` from `explode()`. Each header value is now read.
     - A response with an `X-Next-Page` header but no `rel="next"` link failed with a `TypeError`. It is now returned as a single page.
+- The `gitlab.api.get.process.pagination.finished` log has the number of combined records in `count_records`, which was always missing because the records were counted after they were cast to an object.
 - **`put()` and `delete()` build the same URL as `get()` and `post()`**
     - A URI with a leading slash, or a connection `url` with a trailing slash, sent a URL with a double slash (ex. `https://gitlab.com/api/v4//projects/123`).
     - **Why:** The docblocks say that the URI works with or without a leading slash, and `get()` and `post()` already trimmed both.

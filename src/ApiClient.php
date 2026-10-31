@@ -209,18 +209,21 @@ class ApiClient
                 transaction: false
             );
 
+            $paginated_results = self::getPaginatedResults(
+                connection: $connection,
+                paginated_url: $paginated_url,
+                data: $response->data
+            );
+
             // Parse API Response and convert to returnable object with expected format
             $response = self::parseApiResponse((object) [
-                'paginated_results' => self::getPaginatedResults(
-                    connection: $connection,
-                    paginated_url: $paginated_url,
-                    data: $response->data
-                ),
+                'paginated_results' => $paginated_results,
                 'headers' => $response->headers,
                 'status' => $response->status,
             ]);
 
-            $count_records = is_countable($response->data) ? count($response->data) : null;
+            // The records are counted before parseApiResponse() casts them to an object, which is not countable
+            $count_records = count($paginated_results);
             $duration_ms_per_record = $count_records ? (int) ($event_ms->diffInMilliseconds() / $count_records) : null;
 
             AuditLog::create(
