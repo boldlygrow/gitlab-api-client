@@ -41,7 +41,7 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **Audit logging uses `boldlygrow/audit-log` instead of `provisionesta/audit`**
     - The imported class changed from `Provisionesta\Audit\Log` to `BoldlyGrow\AuditLog\AuditLog`, and log calls changed from `Log::create()` to `AuditLog::create()`. Event types and log levels are unchanged, except for the additions under **Fixed**.
     - **Why:** `provisionesta/audit` is deprecated, and `boldlygrow/audit-log` is its direct replacement under the maintainer's organization.
-    - The constraint is `^2.0.1 || ^3.0`, since 2.0.0 rejected `CarbonImmutable` timestamps (see **Fixed**).
+    - The constraint is `^3.0`. audit-log 3.0 drops Laravel 11 along with this release, and accepts the `CarbonImmutable` timestamps that 2.0.0 rejected (see **Fixed**). See the [audit-log 3.0.0 release notes](https://github.com/boldlygrow/audit-log/blob/main/CHANGELOG.md#300---2026-10-31).
 - **`nesbot/carbon` requires `^3.0`**
     - **Why:** Laravel v12 requires Carbon 3, so the `^2.72.2` range could no longer be installed.
 
@@ -102,13 +102,14 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **Applications that use `CarbonImmutable` no longer get a `TypeError` on every request**
     - The request duration timestamp is typed as `CarbonInterface` instead of `Carbon`.
     - **Why:** With `Date::use(CarbonImmutable::class)`, `now()` returns a `CarbonImmutable`, which the `Carbon` type hint rejected.
-    - The package requires `boldlygrow/audit-log` 2.0.1 or newer, since 2.0.0 had the same type hint.
+    - audit-log 2.0.0 had the same type hint, and the package now requires audit-log 3.0, which accepts any `CarbonInterface`.
 
 ### Upgrade Steps
 
 1. **Upgrade Laravel and PHP first.** Your application must run Laravel v12 or v13 on PHP v8.2 or newer. Applications on older Laravel versions must upgrade the framework first, or stay on `provisionesta/gitlab-api-client:^4.0`.
 2. **Check your token.** If `GITLAB_API_TOKEN` or a connection array `token` doesn't start with `glpat-`, replace it with a personal, group, or project access token.
-3. **Update the package.** Require `boldlygrow/gitlab-api-client:^5.0` in `composer.json` and run `composer update`.
+3. **Update the package.** Require `boldlygrow/gitlab-api-client:^5.0` in `composer.json`. If it also requires `boldlygrow/audit-log`, change that to `^3.0`. Then run `composer update`.
+    - If your application uses more than one of okta-api-client 6.0, gitlab-api-client 5.0, and google-api-client 5.0, upgrade them together. They all require audit-log 3.0, and Composer can install only one audit-log version.
 4. **Update the namespace.** Find and replace `Provisionesta\Gitlab` with `BoldlyGrow\Gitlab` across your code base.
 5. **Update audit logger references.** If you reference the audit logger directly, replace `Provisionesta\Audit\Log` with `BoldlyGrow\AuditLog\AuditLog`, and `Log::create()` with `AuditLog::create()`.
 6. **Review error handling.** Replace any `ErrorException` handling for unlisted status codes with the package exceptions (see **Fixed**).
