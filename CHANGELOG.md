@@ -41,7 +41,7 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **Audit logging uses `boldlygrow/audit-log` instead of `provisionesta/audit`**
     - The imported class changed from `Provisionesta\Audit\Log` to `BoldlyGrow\AuditLog\AuditLog`, and log calls changed from `Log::create()` to `AuditLog::create()`. Event types and log levels are unchanged, except for the additions under **Fixed**.
     - **Why:** `provisionesta/audit` is deprecated, and `boldlygrow/audit-log` is its direct replacement under the maintainer's organization.
-    - The constraint is `^2.0 || ^3.0`.
+    - The constraint is `^2.0.1 || ^3.0`, since 2.0.0 rejected `CarbonImmutable` timestamps (see **Fixed**).
 - **`nesbot/carbon` requires `^3.0`**
     - **Why:** Laravel v12 requires Carbon 3, so the `^2.72.2` range could no longer be installed.
 
@@ -97,7 +97,7 @@ This release moves the package to the `BoldlyGrow` namespace, updates the suppor
 - **Applications that use `CarbonImmutable` no longer get a `TypeError` on every request**
     - The request duration timestamp is typed as `CarbonInterface` instead of `Carbon`.
     - **Why:** With `Date::use(CarbonImmutable::class)`, `now()` returns a `CarbonImmutable`, which the `Carbon` type hint rejected.
-    - **How:** `boldlygrow/audit-log` 2.0.1 or newer is also needed, since 2.0.0 had the same type hint. Run `composer update` to get it.
+    - The package requires `boldlygrow/audit-log` 2.0.1 or newer, since 2.0.0 had the same type hint.
 
 ### Upgrade Steps
 
