@@ -135,11 +135,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->get(
-                url: implode('/', [
-                    rtrim($connection['url'], '/'),
-                    'api/v' . config('gitlab-api-client.version'),
-                    ltrim($uri, '/'),
-                ]),
+                url: self::requestUrl($connection, $uri),
                 query: array_merge(['per_page' => $per_page], $data)
             );
         } catch (RequestException $exception) {
@@ -155,25 +151,23 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/') . $query_string,
-            ]),
+            url: self::requestUrl($connection, $uri) . $query_string,
             request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'get',
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/') . $query_string,
-            ]),
+            url: self::requestUrl($connection, $uri) . $query_string,
             response: $response
         );
 
-        if (self::checkForPagination($response->headers) == true) {
+        // The X-Next-Page header says that there is another page, and the Link header has its URL. A response
+        // without a next link is returned as a single page instead of failing.
+        $paginated_url = self::checkForPagination($response->headers)
+            ? self::generateNextPaginatedResultUrl($response->headers)
+            : null;
+
+        if ($paginated_url !== null) {
             AuditLog::create(
                 event_type: 'gitlab.api.get.process.pagination.started',
                 level: 'debug',
@@ -187,9 +181,7 @@ class ApiClient
 
             $response->paginated_results = self::getPaginatedResults(
                 connection: $connection,
-                paginated_url: self::generateNextPaginatedResultUrl(
-                    headers: $response->headers,
-                ),
+                paginated_url: $paginated_url,
                 data: $response->data
             );
 
@@ -255,11 +247,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->post(
-                url: implode('/', [
-                    rtrim($connection['url'], '/'),
-                    'api/v' . config('gitlab-api-client.version'),
-                    ltrim($uri, '/'),
-                ]),
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -274,21 +262,13 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/'),
-            ]),
+            url: self::requestUrl($connection, $uri),
             request_data: $data,
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'post',
-            url: implode('/', [
-                rtrim($connection['url'], '/'),
-                'api/v' . config('gitlab-api-client.version'),
-                ltrim($uri, '/'),
-            ]),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -334,7 +314,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->put(
-                url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . $uri,
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -370,7 +350,7 @@ class ApiClient
 
             do {
                 $request = Http::withHeaders(self::getRequestHeaders($connection))->put(
-                    url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . $uri,
+                    url: self::requestUrl($connection, $uri),
                     data: $data
                 );
 
@@ -385,14 +365,14 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             request_data: $data,
             response: $response
         );
 
         self::throwExceptionIfEnabled(
             method: 'put',
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -430,7 +410,7 @@ class ApiClient
 
         try {
             $request = Http::withHeaders(self::getRequestHeaders($connection))->delete(
-                url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+                url: self::requestUrl($connection, $uri),
                 data: $data
             );
         } catch (RequestException $exception) {
@@ -445,12 +425,12 @@ class ApiClient
         self::logResponse(
             event_ms: $event_ms,
             method: __METHOD__,
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
         self::throwExceptionIfEnabled(
             method: 'delete',
-            url: $connection['url'] . '/api/v' . config('gitlab-api-client.version') . '/' . ltrim($uri, '/'),
+            url: self::requestUrl($connection, $uri),
             response: $response
         );
 
@@ -494,6 +474,26 @@ class ApiClient
         }
 
         return $validator->validated();
+    }
+
+    /**
+     * Build the full API URL for a URI
+     *
+     * The URI can have a leading slash and the connection URL can have a trailing slash, so both are trimmed to avoid
+     * a double slash that the API routes to a different endpoint.
+     *
+     * @param  array   $connection  An array with `url` and `token`.
+     * @param  string  $uri         The URI with or without leading slash after `/api/v4/`
+     *
+     * @return string Ex. `https://gitlab.com/api/v4/projects/123`
+     */
+    private static function requestUrl(array $connection, string $uri): string
+    {
+        return implode('/', [
+            rtrim($connection['url'], '/'),
+            'api/v' . config('gitlab-api-client.version'),
+            ltrim($uri, '/'),
+        ]);
     }
 
     /**
@@ -636,19 +636,19 @@ class ApiClient
     private static function generateNextPaginatedResultUrl(
         array $headers,
     ): ?string {
+        // GitLab sends one Link header with comma-separated links, but a response with more than one Link header is
+        // kept as an array by convertHeadersToArray(), so each value is split.
         $links = [];
-        if (array_key_exists('Link', $headers)) {
-            $links = explode(', ', $headers['Link']);
-        } elseif (array_key_exists('link', $headers)) {
-            $links = explode(', ', $headers['link']);
+        foreach ((array) ($headers['Link'] ?? $headers['link'] ?? []) as $link_header) {
+            $links = array_merge($links, explode(', ', $link_header));
         }
 
-        foreach ($links as $link_key => $link_url) {
+        foreach ($links as $link_url) {
             if (Str::contains($link_url, 'next')) {
                 // Remove the '<' and '>; rel="next"' that is around the next api_url
                 // Before: <https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100>; rel="next"
                 // After: https://gitlab.com/api/v4/projects/123456/issues/236/notes?page=3&per_page=100
-                $url_query = Str::remove('<', $links[$link_key]);
+                $url_query = Str::remove('<', $link_url);
                 $url_query = Str::remove('>; rel="next"', $url_query);
 
                 return $url_query;
@@ -876,7 +876,11 @@ class ApiClient
             transaction: true
         );
 
+        // The empty data and headers keep the same properties as a response from parseApiResponse(), since this is
+        // returned by the same methods.
         return (object) [
+            'data' => null,
+            'headers' => [],
             'error' => (object) [
                 'code' => $exception->getCode(),
                 'message' => $exception->getMessage(),
@@ -912,7 +916,7 @@ class ApiClient
         array $request_data = [],
         ?CarbonInterface $event_ms = null
     ): void {
-        $log_type = [
+        $log_types = [
             200 => ['event_type' => 'success', 'level' => 'debug'],
             201 => ['event_type' => 'success', 'level' => 'debug'],
             202 => ['event_type' => 'success', 'level' => 'debug'],
@@ -922,6 +926,7 @@ class ApiClient
             403 => ['event_type' => 'error.forbidden', 'level' => 'error'],
             404 => ['event_type' => 'warning.not-found', 'level' => 'warning'],
             405 => ['event_type' => 'error.method-not-allowed', 'level' => 'error'],
+            409 => ['event_type' => 'error.conflict', 'level' => 'error'],
             412 => ['event_type' => 'error.precondition-failed', 'level' => 'error'],
             422 => ['event_type' => 'error.unprocessable', 'level' => 'error'],
             429 => ['event_type' => 'critical.rate-limit', 'level' => 'critical'],
@@ -937,6 +942,15 @@ class ApiClient
             526 => ['event_type' => 'critical.cloudflare.ssl-certificate', 'level' => 'critical'],
             530 => ['event_type' => 'critical.cloudflare.internal-error', 'level' => 'critical'],
         ];
+
+        // A status code that is not listed above (ex. a 502 or 504 from a gateway) is logged with the event type for
+        // its range instead of failing with an undefined array key before throwExceptionIfEnabled() is reached.
+        $log_type = $log_types[$response->status->code] ?? match (true) {
+            $response->status->successful => ['event_type' => 'success', 'level' => 'debug'],
+            $response->status->clientError => ['event_type' => 'error.client-error', 'level' => 'error'],
+            $response->status->serverError => ['event_type' => 'critical.server-error', 'level' => 'critical'],
+            default => ['event_type' => 'warning.unexpected-status', 'level' => 'warning'],
+        };
 
         $errors = [];
         if ($response->status->failed && ($error_message = self::parseErrorMessage($response)) !== null) {
@@ -1001,9 +1015,9 @@ class ApiClient
                 'gitlab',
                 'api',
                 $method_suffix,
-                $log_type[$response->status->code]['event_type'],
+                $log_type['event_type'],
             ]),
-            level: $log_type[$response->status->code]['level'],
+            level: $log_type['level'],
             message: $message,
             metadata: $metadata,
             method: $method,
@@ -1109,6 +1123,16 @@ class ApiClient
                     throw new CloudflareSslCertificateException($message);
                 case 530:
                     throw new CloudflareInternalErrorException($message);
+                default:
+                    // A status code without its own exception (ex. a 410, 501, or 502) is treated as the x00 status
+                    // code of its range, as RFC 9110 15 requires for an unrecognized status code, so that every 4xx
+                    // and 5xx response throws an exception.
+                    if ($response->status->clientError) {
+                        throw new BadRequestException($message);
+                    }
+                    if ($response->status->serverError) {
+                        throw new ServerErrorException($message);
+                    }
             }
         }
     }

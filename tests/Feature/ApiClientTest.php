@@ -4,6 +4,7 @@ use BoldlyGrow\Gitlab\ApiClient;
 use BoldlyGrow\Gitlab\Exceptions\ConfigurationException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 it('uses the url and token from the config when no connection array is passed', function () {
     Http::fake([
@@ -250,3 +251,54 @@ it('logs the rate limit remaining from the response headers', function () {
 it('encodes a path with the GitLab URL encoding syntax', function () {
     expect(ApiClient::urlencode('group-name/project.name'))->toBe('group%2Dname%2Fproject%2Ename');
 });
+
+it('follows the next page link when the Link header is sent more than once', function () {
+    Http::fake([
+        'gitlab.example.com/api/v4/projects?per_page=100' => Http::response([['id' => 1]], 200, [
+            'Link' => [
+                '<https://gitlab.example.com/api/v4/projects?page=1&per_page=100>; rel="first"',
+                '<https://gitlab.example.com/api/v4/projects?page=2&per_page=100>; rel="next"',
+            ],
+            'X-Next-Page' => '2',
+        ]),
+        'gitlab.example.com/api/v4/projects?page=2&per_page=100' => Http::response([['id' => 2]], 200, [
+            'X-Next-Page' => '',
+        ]),
+    ]);
+
+    $response = ApiClient::get(uri: 'projects');
+
+    expect(collect((array) $response->data)->pluck('id')->all())->toBe([1, 2]);
+});
+
+it('returns the first page when the X-Next-Page header is set without a next link', function () {
+    Http::fake([
+        'gitlab.example.com/api/v4/projects*' => Http::response([['id' => 1]], 200, ['X-Next-Page' => '2']),
+    ]);
+
+    $response = ApiClient::get(uri: 'projects');
+
+    expect(collect((array) $response->data)->pluck('id')->all())->toBe([1]);
+    expect(Http::recorded())->toHaveCount(1);
+});
+
+it('builds the request URL without a double slash for any URI and connection URL', function (string $client_method, string $url, string $uri) {
+    Http::fake([
+        'gitlab.example.com/*' => Http::response(['id' => 123]),
+    ]);
+
+    ApiClient::{$client_method}(uri: $uri, connection: gitlabConnection(['url' => $url]));
+
+    /** @var Request $request */
+    [$request] = Http::recorded()->sole();
+    expect(Str::before($request->url(), '?'))->toBe('https://gitlab.example.com/api/v4/projects/123');
+})->with([
+    'get with a leading slash' => ['get', 'https://gitlab.example.com', '/projects/123'],
+    'get with a trailing slash url' => ['get', 'https://gitlab.example.com/', 'projects/123'],
+    'post with a leading slash' => ['post', 'https://gitlab.example.com', '/projects/123'],
+    'post with a trailing slash url' => ['post', 'https://gitlab.example.com/', 'projects/123'],
+    'put with a leading slash' => ['put', 'https://gitlab.example.com', '/projects/123'],
+    'put with a trailing slash url' => ['put', 'https://gitlab.example.com/', 'projects/123'],
+    'delete with a leading slash' => ['delete', 'https://gitlab.example.com', '/projects/123'],
+    'delete with a trailing slash url' => ['delete', 'https://gitlab.example.com/', 'projects/123'],
+]);

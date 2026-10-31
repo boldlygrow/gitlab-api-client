@@ -10,6 +10,7 @@ use BoldlyGrow\Gitlab\Exceptions\CloudflareResponseTimeoutException;
 use BoldlyGrow\Gitlab\Exceptions\CloudflareSslCertificateException;
 use BoldlyGrow\Gitlab\Exceptions\CloudflareSslHandshakeException;
 use BoldlyGrow\Gitlab\Exceptions\CloudflareUnknownErrorException;
+use BoldlyGrow\Gitlab\Exceptions\ConflictException;
 use BoldlyGrow\Gitlab\Exceptions\ForbiddenException;
 use BoldlyGrow\Gitlab\Exceptions\MethodNotAllowedException;
 use BoldlyGrow\Gitlab\Exceptions\NotFoundException;
@@ -33,6 +34,7 @@ it('throws the exception for the status code of a failed response', function (in
     'forbidden' => [403, ForbiddenException::class],
     'not found' => [404, NotFoundException::class],
     'method not allowed' => [405, MethodNotAllowedException::class],
+    'conflict' => [409, ConflictException::class],
     'precondition failed' => [412, PreconditionFailedException::class],
     'unprocessable' => [422, UnprocessableException::class],
     'rate limit' => [429, RateLimitException::class],
@@ -69,6 +71,7 @@ it('logs the event type and level for the status code', function (int $status, s
     'forbidden' => [403, 'error.forbidden', 'error'],
     'not found' => [404, 'warning.not-found', 'warning'],
     'method not allowed' => [405, 'error.method-not-allowed', 'error'],
+    'conflict' => [409, 'error.conflict', 'error'],
     'precondition failed' => [412, 'error.precondition-failed', 'error'],
     'unprocessable' => [422, 'error.unprocessable', 'error'],
     'rate limit' => [429, 'critical.rate-limit', 'critical'],
@@ -174,3 +177,45 @@ it('returns the failed response instead of throwing when exceptions are disabled
     expect($response->status->clientError)->toBeTrue();
     expect($response->data->message)->toBe('404 Project Not Found');
 });
+
+it('throws a ConflictException for a 409 response', function () {
+    Http::fake([
+        'gitlab.example.com/api/v4/projects/123/members' => Http::response(['message' => 'Member already exists'], 409),
+    ]);
+
+    expect(fn () => ApiClient::post(uri: 'projects/123/members', data: ['user_id' => 1]))
+        ->toThrow(ConflictException::class, 'POST 409 https://gitlab.example.com/api/v4/projects/123/members (Reason) Member already exists');
+});
+
+it('throws the exception for the range of a 4xx or 5xx status code without its own exception', function (int $status, string $exception) {
+    Http::fake([
+        'gitlab.example.com/api/v4/projects/123*' => Http::response('', $status),
+    ]);
+
+    expect(fn () => ApiClient::get(uri: 'projects/123'))
+        ->toThrow($exception, 'GET ' . $status . ' https://gitlab.example.com/api/v4/projects/123');
+})->with([
+    'gone' => [410, BadRequestException::class],
+    'not implemented' => [501, ServerErrorException::class],
+    'bad gateway' => [502, ServerErrorException::class],
+    'gateway timeout' => [504, ServerErrorException::class],
+]);
+
+it('logs a status code without its own event type with the event type for its range', function (int $status, string $event_type, string $level) {
+    config()->set('gitlab-api-client.exceptions', false);
+    Http::fake([
+        'gitlab.example.com/api/v4/projects/123*' => Http::response('', $status),
+    ]);
+
+    $response = ApiClient::get(uri: 'projects/123');
+
+    expect($response->status->code)->toBe($status);
+    [$entry] = loggedEvents('gitlab.api.get.' . $event_type);
+    expect($entry['level'])->toBe($level);
+})->with([
+    'partial content' => [206, 'success', 'debug'],
+    'not modified' => [304, 'warning.unexpected-status', 'warning'],
+    'conflict' => [409, 'error.conflict', 'error'],
+    'gone' => [410, 'error.client-error', 'error'],
+    'bad gateway' => [502, 'critical.server-error', 'critical'],
+]);
