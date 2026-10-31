@@ -219,7 +219,20 @@ it('logs the request data without the keys excluded for the method', function (s
     'get without key and password' => ['get', ['search' => 'cool', 'key' => 'secret', 'password' => 'hunter2'], ['search' => 'cool']],
     'post without content' => ['post', ['branch' => 'main', 'content' => 'YmFzZTY0'], ['branch' => 'main']],
     'put without content' => ['put', ['branch' => 'main', 'content' => 'YmFzZTY0'], ['branch' => 'main']],
+    'delete with every key' => ['delete', ['skip_subresources' => true], ['skip_subresources' => true]],
 ]);
+
+it('logs the DELETE request data without the keys excluded in the config', function () {
+    config()->set('gitlab-api-client.log.request_data.delete.excluded', ['reason']);
+    Http::fake([
+        'gitlab.example.com/api/v4/projects/123/members/1' => Http::response('', 204),
+    ]);
+
+    ApiClient::delete(uri: 'projects/123/members/1', data: ['skip_subresources' => true, 'reason' => 'Offboarded']);
+
+    [$entry] = loggedEvents('gitlab.api.delete.success');
+    expect($entry['context']['metadata']['request_data'])->toBe(['skip_subresources' => true]);
+});
 
 it('does not log the request data when it is disabled for the method', function () {
     config()->set('gitlab-api-client.log.request_data.post.enabled', false);
